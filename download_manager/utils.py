@@ -184,14 +184,12 @@ async def download_chunk(session, url, start, end, chunk_file, progress=None, ta
 
 async def download_file(url, output_file, progress=None):
     connector = TCPConnector(
-        limit=MAX_CONNECTIONS,
+        limit_per_host=MAX_CONNECTIONS,
         ttl_dns_cache=300,
         enable_cleanup_closed=True,
-        force_close=False,
         ssl=False
     )
-
-    timeout = ClientTimeout(total=3600, connect=60)
+    timeout = ClientTimeout(total=None, connect=60)
     session_kwargs = {
         "connector": connector,
         "timeout": timeout,
@@ -200,38 +198,57 @@ async def download_file(url, output_file, progress=None):
 
     async with aiohttp.ClientSession(**session_kwargs) as session:
         try:
+            # Get file size and check if server supports range requests
             async with session.head(url) as response:
                 file_size = int(response.headers.get("Content-Length", 0))
                 accept_ranges = response.headers.get("Accept-Ranges", "none")
-
                 if not file_size or accept_ranges.lower() == "none":
+                    # Fall back to single chunk download
                     return await download_with_fallback(session, url, output_file, progress)
 
-            chunk_count = min(MAX_CHUNKS, max(
-                4, math.ceil(file_size / (10 * 1024 * 1024))))
-            chunk_size = math.ceil(file_size / chunk_count)
-            chunks = [(i * chunk_size, min((i + 1) * chunk_size - 1, file_size - 1))
-                      for i in range(chunk_count)]
+            # Calculate number of chunks using logarithmic function
+            size_in_mb = file_size / (1024 * 1024)
+            if size_in_mb <= 0:
+                num_chunks = 1
+            else:
+                num_chunks = max(
+                    1, min(MAX_CHUNKS, int(math.log2(size_in_mb)) + 1))
 
-            # Process chunks in batches
-            batch_size = min(BATCH_SIZE, chunk_count)
+            # Compute chunk size
+            chunk_size = file_size // num_chunks
+            if file_size % num_chunks != 0:
+                chunk_size += 1  # Adjust chunk_size to cover the remainder
+
+            # Adjust num_chunks based on the final chunk_size
+            num_chunks = (file_size + chunk_size - 1) // chunk_size
+
+            # Generate chunk ranges
+            chunks = []
+            for i in range(int(num_chunks)):
+                start = i * chunk_size
+                end = min(start + chunk_size - 1, file_size - 1)
+                chunks.append((start, end))
+
+            # Calculate batch size based on number of chunks
+            batch_size = max(1, int(math.log2(num_chunks)) + 1)
+
             all_chunk_files = []
-            for batch_start in range(0, chunk_count, batch_size):
-                batch_end = min(batch_start + batch_size, chunk_count)
+            for batch_start in range(0, num_chunks, batch_size):
+                batch_end = min(batch_start + batch_size, num_chunks)
                 batch_chunks = chunks[batch_start:batch_end]
 
                 download_tasks = []
                 chunk_files = []
 
-                for i, (start, end) in enumerate(batch_chunks, start=batch_start):
-                    chunk_file = f"{output_file}.part{i}"
+                for idx, (start, end) in enumerate(batch_chunks, start=batch_start):
+                    chunk_file = f"{output_file}.part{idx}"
                     chunk_files.append(chunk_file)
                     all_chunk_files.append(chunk_file)
 
                     task_id = None
                     if progress:
                         task_id = progress.add_task(
-                            f"[cyan]Chunk {i + 1}/{chunk_count}",
+                            f"[cyan]Chunk {idx + 1}/{num_chunks}",
                             total=end - start + 1
                         )
 
@@ -245,7 +262,7 @@ async def download_file(url, output_file, progress=None):
 
                 # Identify failed chunks
                 failed_chunks = [
-                    i for i, result in enumerate(results, start=batch_start)
+                    idx for idx, result in enumerate(results, start=batch_start)
                     if isinstance(result, Exception) or not result
                 ]
 
@@ -259,22 +276,26 @@ async def download_file(url, output_file, progress=None):
                         if progress:
                             progress.console.print(
                                 f"[red]Failed to download {
-                                    len(remaining_failed)} chunks after all retries[/red]"
+                                    len(remaining_failed)} chunks after retries[/red]"
                             )
                         return await download_with_fallback(session, url, output_file, progress)
 
             # Combine all successful chunks
             with open(output_file, "wb") as output:
-                for chunk_file in all_chunk_files:
+                for i in range(num_chunks):
+                    chunk_file = f"{output_file}.part{i}"
                     if os.path.exists(chunk_file):
                         with open(chunk_file, "rb") as part:
-                            while data := part.read(BUFFER_SIZE):
+                            while True:
+                                data = part.read(BUFFER_SIZE)
+                                if not data:
+                                    break
                                 output.write(data)
                         os.remove(chunk_file)
 
             if progress:
-                progress.console.print(
-                    f"[bold green]Download completed: {output_file}[/bold green]")
+                progress.console.print(f"""[bold green]Download completed: {
+                                       output_file}[/bold green]""")
             return True
 
         except Exception as e:
