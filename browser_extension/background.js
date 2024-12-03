@@ -1,15 +1,29 @@
-// Intercept download events in Chrome
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  const downloadUrl = item.url;
-  const fileName = item.filename;
+chrome.downloads.onCreated.addListener(async function (downloadItem) {
+  // Cancel Chrome's download
+  chrome.downloads.cancel(downloadItem.id);
 
-  // Send the intercepted URL to the desktop application
-  const ws = new WebSocket("ws://localhost:8765"); // Connect to desktop app
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ url: downloadUrl, name: fileName })); // Send URL and file metadata
-    ws.close();
-  };
+  // Erase from download history
+  chrome.downloads.erase({ id: downloadItem.id });
 
-  // Cancel the download in the browser
-  chrome.downloads.cancel(item.id);
+  // Send to Python server
+  try {
+    const response = await fetch("http://localhost:5500/download", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: downloadItem.url,
+        filename: downloadItem.filename,
+      }),
+    });
+
+    if (response.ok) {
+      console.log("Download request sent to EDM");
+    } else {
+      console.error("Failed to send download request");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+  }
 });

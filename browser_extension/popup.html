@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>EDM Download Interceptor</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+    }
+
+    .active-status {
+      display: inline-block;
+      margin-left: 10px;
+    }
+
+    .active-status circle {
+      fill: green;
+    }
+
+    .not-active-status circle {
+      fill: red;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 5px;
+      width: 100px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h3>EDM Download Interceptor</h3>
+    <p>Version: 1.0.0</p>
+  </div>
+  <hr>
+  <h4>Status</h4>
+  <div id="status">
+    <svg height="100" width="100" class="active-status">
+      <circle cx="30" cy="30" r="15" stroke="none" stroke-width="3" fill="red" />
+    </svg>
+
+  </div>
+  <hr>
+  <div id="">
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+  </div>
+</body>
+
+</html>
