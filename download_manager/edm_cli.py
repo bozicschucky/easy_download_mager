@@ -33,6 +33,9 @@ def main():
     output_file = os.path.basename(parsed_url.path)
     output_file = sanitize_filename(output_file)
 
+    output_dir = args.output_dir or os.path.join(
+        os.path.expanduser('~'), 'Downloads')
+
     if not output_file:
         console.print(
             "[bold red]Error: Could not determine output file name from URL.[/bold red]")
@@ -49,7 +52,7 @@ def main():
         console=console,
     ) as progress:
         asyncio.run(download_file(args.url, output_file,
-                    output_dir=args.output_dir, progress=progress))
+                    output_dir=output_dir, progress=progress))
 
 
 if __name__ == "__main__":
