@@ -20,6 +20,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Download a file with progress display.")
     parser.add_argument("url", help="The URL of the file to download")
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        help="Output directory (default: Downloads folder)",
+        default=None
+    )
     args = parser.parse_args()
 
     # Generate output file name from URL
@@ -42,7 +48,8 @@ def main():
         TimeRemainingColumn(),
         console=console,
     ) as progress:
-        asyncio.run(download_file(args.url, output_file, progress))
+        asyncio.run(download_file(args.url, output_file,
+                    output_dir=args.output_dir, progress=progress))
 
 
 if __name__ == "__main__":

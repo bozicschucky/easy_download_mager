@@ -2,6 +2,7 @@ import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
 import asyncio
 import os
+from pathlib import Path
 import aiofiles
 import humanize
 import shutil
@@ -27,6 +28,10 @@ RETRY_DELAY = 2  # Base delay in seconds for exponential backoff
 chunk_cache: Dict[str, bytes] = {}
 file_handle_pool = ThreadPoolExecutor(max_workers=32)
 
+
+def get_default_downloads_dir() -> str:
+    """Get the default downloads directory for the current platform"""
+    return str(Path.home() / "Downloads")
 
 async def resume_download(session, url: str, output_file: str, start_byte: int, progress=None):
     """Resume download from specific byte position"""
@@ -109,8 +114,22 @@ async def merge_chunks(chunk_files, output_file, buffer_size, progress=None):
         os.remove(chunk_file)
 
 
-async def download_file(url: str, output_file: str, progress=None):
-    """Enhanced download function with additional safeguards"""
+async def download_file(url: str, output_file: str, output_dir: str = None, progress=None):
+    """
+    Download file with optional output directory
+    Args:
+        url: Source URL
+        output_file: Target filename
+        output_dir: Optional custom output directory (default: user's Downloads folder)
+        progress: Progress callback
+    """
+
+    # Resolve output directory
+    output_dir = output_dir or get_default_downloads_dir()
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Combine output path
+    output_path = os.path.join(output_dir, output_file)
 
     connector = TCPConnector(
         limit=MAX_CONNECTIONS,
@@ -154,17 +173,17 @@ async def download_file(url: str, output_file: str, progress=None):
                         if progress:
                             progress.console.print(
                                 "[yellow]Server doesn't support chunked downloads, trying single file...[/yellow]")
-                            return await download_single_file(session, url, output_file, progress)
+                            return await download_single_file(session, url, output_path, progress)
             except Exception as e:
                 if progress:
                     progress.console.print(
                         f"[red]Failed to get file info: {str(e)}[/red]")
-                return await download_single_file(session, url, output_file, progress)
+                return await download_single_file(session, url, output_path, progress)
 
             # Calculate chunks and prepare download
             chunks, batch_size = calculate_chunks_and_batches(file_size)
             buffer_size = get_dynamic_buffer_size(file_size)
-            chunk_files = [os.path.join(temp_dir, f"{output_file}.part{i}")
+            chunk_files = [os.path.join(temp_dir, f"{output_path}.part{i}")
                            for i in range(len(chunks))]
 
             # Process chunks in batches
@@ -209,13 +228,13 @@ async def download_file(url: str, output_file: str, progress=None):
                                     "[red]Chunk retry failed, attempting to resume...[/red]")
                             try:
                                 # Try to resume download
-                                if await resume_download(session, url, output_file, start, progress):
+                                if await resume_download(session, url, output_path, start, progress):
                                     continue
                             except NetworkError:
                                 if progress:
                                     progress.console.print(
                                         "[red]Resume failed, falling back to single file...[/red]")
-                                return await download_single_file(session, url, output_file, progress)
+                                return await download_single_file(session, url, output_path, progress)
 
                 # Log transfer for bandwidth monitoring
                 for batch_file in batch_files:
@@ -224,16 +243,16 @@ async def download_file(url: str, output_file: str, progress=None):
                             os.path.getsize(batch_file))
 
             # Merge chunks into final output file
-            await merge_chunks(chunk_files, output_file, buffer_size, progress)
+            await merge_chunks(chunk_files, output_path, buffer_size, progress)
 
             # Verify file integrity
-            if not await verify_file_integrity(output_file, CHUNK_READ_SIZE):
+            if not await verify_file_integrity(output_path, CHUNK_READ_SIZE):
                 raise DownloadError("File integrity check failed")
 
             if progress:
                 speed = bandwidth_monitor.get_speed()
                 progress.console.print(
-                    f"[bold green]Download completed: {output_file} "
+                    f"[bold green]Download completed: {output_path} "
                     f"(Avg. Speed: {humanize.naturalsize(
                         speed)}/s)[/bold green]"
                 )
@@ -250,6 +269,6 @@ async def download_file(url: str, output_file: str, progress=None):
     except Exception as e:
         if progress:
             progress.console.print(f"[red]Download failed: {str(e)}[/red]")
-        return await download_single_file(session, url, output_file, progress)
+        return await download_single_file(session, url, output_path, progress)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
