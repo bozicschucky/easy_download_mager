@@ -1,16 +1,15 @@
-# web_server.py
+import asyncio
 import os
 from aiohttp import web
 import logging
 from urllib.parse import urlparse, unquote
-from rich.console import Console
-from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 from download_manager.edm_cli import sanitize_filename
-from download_manager.edm import download_file
+from download_manager.utils.download_manager import DownloadManager as DM
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-console = Console()
+
+download_manager = DM(max_concurrent_downloads=4, progress=None)
 
 routes = web.RouteTableDef()
 
@@ -24,59 +23,38 @@ def ensure_downloads_dir():
 
 @routes.post('/download')
 async def handle_download(request):
-    try:
-        data = await request.json()
-        url = data.get('url')
+    data = await request.json()
+    url = data.get('url')
+    if not url:
+        return web.json_response({'error': 'URL required'}, status=400)
 
-        if not url:
-            return web.json_response({'error': 'URL required'}, status=400)
+    parsed_url = urlparse(url)
+    output_file = os.path.basename(parsed_url.path)
+    output_file = sanitize_filename(output_file)
+    output_dir = ensure_downloads_dir()
 
-        parsed_url = urlparse(url)
-        output_file = os.path.basename(parsed_url.path)
-        output_file = sanitize_filename(output_file)
-        output_dir = ensure_downloads_dir()
+    await download_manager.add_download(url, output_file, output_dir)
 
-        console.print(f"[bold blue]Downloading file to: {
-                      output_file}[/bold blue]")
+    return web.json_response({
+        'status': 'Download queued',
+        'url': url,
+        'filename': output_file,
+        'output_dir': output_dir
+    })
 
-        # Create the progress bar and keep it active during the download
-        progress = Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-            console=console,
-            refresh_per_second=10
-        )
 
-        with progress:
-            # Await the download directly
-            await download_file(
-                url=url,
-                output_file=output_file,
-                output_dir=output_dir,
-                progress=progress
-            )
+async def start_background_tasks(app):
+    app['download_manager_task'] = asyncio.create_task(download_manager.run())
 
-        console.print(f"[green]Download completed for {url}[/green]")
 
-        # Return response after the download completes
-        return web.json_response({
-            'status': 'Download completed',
-            'url': url,
-            'filename': output_file,
-            'output_dir': output_dir
-        })
-
-    except Exception as e:
-        logger.error(f"Download failed: {str(e)}")
-        return web.json_response({
-            'error': f'Download failed: {str(e)}'
-        }, status=500)
+async def cleanup_background_tasks(app):
+    app['download_manager_task'].cancel()
+    await app['download_manager_task']
 
 app = web.Application()
 app.add_routes(routes)
+app.on_startup.append(start_background_tasks)
+app.on_cleanup.append(cleanup_background_tasks)
 
 if __name__ == "__main__":
     web.run_app(app, port=5500)

@@ -6,7 +6,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         'aiohttp',
-        'rich',
         'aiofiles',
         'asyncio',
         'humanize',

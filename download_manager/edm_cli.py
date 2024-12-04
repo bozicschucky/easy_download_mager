@@ -1,14 +1,12 @@
-from rich.console import Console
-from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 from urllib.parse import urlparse, unquote
 import re
 import os
 import asyncio
 import argparse
-from download_manager.edm import download_file
+from download_manager.utils.download_manager import DownloadManager
+from logger.progress_tracker import logger
 
-console = Console()
-
+download_manager = DownloadManager(max_concurrent_downloads=4)
 
 def sanitize_filename(filename):
     """Sanitize a filename by removing invalid characters."""
@@ -18,8 +16,10 @@ def sanitize_filename(filename):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download a file with progress display.")
-    parser.add_argument("url", help="The URL of the file to download")
+        description="Download files with progress display."
+    )
+    parser.add_argument("urls", nargs='+',
+                        help="The URLs of the files to download")
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -28,31 +28,25 @@ def main():
     )
     args = parser.parse_args()
 
-    # Generate output file name from URL
-    parsed_url = urlparse(args.url)
-    output_file = os.path.basename(parsed_url.path)
-    output_file = sanitize_filename(output_file)
-
     output_dir = args.output_dir or os.path.join(
         os.path.expanduser('~'), 'Downloads')
 
-    if not output_file:
-        console.print(
-            "[bold red]Error: Could not determine output file name from URL.[/bold red]")
-        return
+    async def run_downloads():
+        for url in args.urls:
+            parsed_url = urlparse(url)
+            output_file = os.path.basename(parsed_url.path)
+            output_file = sanitize_filename(output_file)
+            if not output_file:
+                logger.error(
+                    f"Could not determine filename from URL: {
+                        url}"
+                )
+                continue
+            await download_manager.add_download(url, output_file, output_dir)
+        await download_manager.run()
 
-    console.print(f"[bold blue]Downloading file to: {output_file}[/bold blue]")
+    asyncio.run(run_downloads())
 
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
-        asyncio.run(download_file(args.url, output_file,
-                    output_dir=output_dir, progress=progress))
 
 
 if __name__ == "__main__":
