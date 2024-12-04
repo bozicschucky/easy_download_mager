@@ -5,8 +5,8 @@ import logging
 from urllib.parse import urlparse, unquote
 from rich.console import Console
 from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
-from .edm_cli import sanitize_filename
-from .edm import download_file
+from download_manager.edm_cli import sanitize_filename
+from download_manager.edm import download_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
