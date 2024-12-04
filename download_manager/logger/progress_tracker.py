@@ -1,15 +1,6 @@
-import logging
 import time
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-
-logger = logging.getLogger(__name__)
-
+from download_manager.logger.color_formatter import logger
 
 class ProgressTracker:
     def __init__(self, total_size):
@@ -30,5 +21,10 @@ class ProgressTracker:
                 time.strftime('%H:%M:%S', time.gmtime(remaining_time))}"
         )
 
-    def log_message(self, message):
-        logger.info(message)
+    def log_message(self, message, level="info"):
+        if level == "error":
+            logger.error(message)
+        elif level == "success":
+            logger.success(message)
+        else:
+            logger.info(message)

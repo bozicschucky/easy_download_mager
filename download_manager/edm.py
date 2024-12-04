@@ -108,7 +108,7 @@ async def download_chunk(session, url, start, end, output_file, progress_tracker
 async def merge_chunks(chunk_files, output_file, buffer_size, progress_tracker=None):
     """Merge downloaded chunks into the final output file."""
     total_size = sum(os.path.getsize(chunk) for chunk in chunk_files)
-    logger.info(f"Merging chunks into {os.path.basename(output_file)} {
+    logger.success(f"Merging chunks into {os.path.basename(output_file)} {
                 humanize.naturalsize(total_size)}")
 
     async with aiofiles.open(output_file, 'wb') as out:
@@ -125,7 +125,7 @@ async def merge_chunks(chunk_files, output_file, buffer_size, progress_tracker=N
     for chunk_file in chunk_files:
         os.remove(chunk_file)
 
-    logger.info(f"Completed merging {os.path.basename(output_file)}")
+    logger.success(f"Completed merging {os.path.basename(output_file)}")
 
 
 async def download_file(url: str, output_file: str, output_dir: str = None, progress=None):
@@ -198,7 +198,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                 batch_chunks = chunks[batch_start:batch_end]
                 batch_files = chunk_files[batch_start:batch_end]
 
-                logger.info(f"Starting Batch {
+                logger.success(f"Starting Batch {
                             batch_num}/{(len(chunks) + batch_size - 1) // batch_size}")
 
                 tasks = []
@@ -246,7 +246,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
             if not await verify_file_integrity(output_path, CHUNK_READ_SIZE):
                 raise DownloadError("File integrity check failed")
 
-            logger.info(f"Download completed: {output_path} (Avg. Speed: {
+            logger.success(f"Download completed: {output_path} (Avg. Speed: {
                         bandwidth_monitor.get_speed() / (1024 * 1024):.1f} MB/s)")
 
     except aiohttp.ClientError as e:
