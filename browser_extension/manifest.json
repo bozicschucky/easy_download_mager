@@ -2,8 +2,13 @@
   "manifest_version": 3,
   "name": "EDM Download Interceptor",
   "version": "1.0",
-  "permissions": ["downloads", "downloads.open", "downloads.shelf", "storage"],
-  "host_permissions": ["http://localhost:5500/*"],
+  "permissions": [
+    "downloads",
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
