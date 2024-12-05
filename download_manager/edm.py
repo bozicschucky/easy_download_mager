@@ -181,7 +181,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                 if not accepts_ranges:
                     logger.info(
                         "Server doesn't support chunked downloads, trying single file...")
-                    return await download_single_file(session, url, output_path)
+                    return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
 
                 # Set up progress tracker
                 progress_tracker = ProgressTracker(file_size)
@@ -231,7 +231,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                             except NetworkError:
                                 logger.error(
                                     "Resume failed, falling back to single file...")
-                                return await download_single_file(session, url, output_path)
+                                return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
 
                 # Log transfer for bandwidth monitoring
                 for batch_file in batch_files:
@@ -257,6 +257,6 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
         raise StorageError(str(e))
     except Exception as e:
         logger.error(f"Download failed: {str(e)}")
-        return await download_single_file(session, url, output_path)
+        return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
