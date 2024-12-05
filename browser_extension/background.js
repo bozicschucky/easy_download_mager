@@ -4,11 +4,12 @@ chrome.downloads.onCreated.addListener(async function (downloadItem) {
     // Cancel Chrome's download
     chrome.downloads.cancel(downloadItem.id);
     console.log({ downloadItem });
+    const url = downloadItem.finalUrl || downloadItem.url;
 
     // Get headers using Fetch API
     const getHeaders = async () => {
       try {
-        const response = await fetch(downloadItem.url, {
+        const response = await fetch(url, {
           method: "HEAD",
           mode: "no-cors",
           credentials: "include",
@@ -38,11 +39,11 @@ chrome.downloads.onCreated.addListener(async function (downloadItem) {
     }
 
     const fileDetails = {
-      url: downloadItem.url,
+      url: url,
       final_url: downloadItem.finalUrl,
       filename:
         downloadItem.filename ||
-        new URL(downloadItem.url).pathname.split("/").pop(),
+        new URL(downloadItem.finalUrl).pathname.split("/").pop(),
       fileType: headers["content-type"] || "application/octet-stream",
       fileSize: headers["content-length"] || downloadItem.fileSize || 0,
       referrer: downloadItem.referrer,
