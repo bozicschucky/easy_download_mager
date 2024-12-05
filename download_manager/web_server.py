@@ -1,6 +1,7 @@
 import asyncio
 import os
 from aiohttp import web
+from download_manager.edm_cli import sanitize_filename
 from download_manager.utils.download_manager import DownloadManager as DM
 
 download_manager = DM(max_concurrent_downloads=4, progress=None)
@@ -21,6 +22,10 @@ async def handle_download(request):
     output_file = data.get('filename')
     if not url:
         return web.json_response({'error': 'URL required'}, status=400)
+
+    # Sanitize filename
+    if output_file:
+        output_file = sanitize_filename(output_file)
 
     output_dir = ensure_downloads_dir()
 

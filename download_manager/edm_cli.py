@@ -8,10 +8,26 @@ from logger.progress_tracker import logger
 
 download_manager = DownloadManager(max_concurrent_downloads=4)
 
-def sanitize_filename(filename):
-    """Sanitize a filename by removing invalid characters."""
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Clean filename by:
+    1. Decode URL encoding (%20 etc)
+    2. Remove invalid characters
+    3. Replace spaces properly
+    4. Preserve file extension
+    """
+    # First decode URL encoded characters
     filename = unquote(filename)
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
+
+    # Split filename and extension
+    name, ext = os.path.splitext(filename)
+    name = re.sub(r'[<>:"/\\|?*]', '', name)  # Remove Windows invalid chars
+    name = re.sub(r'\s+', ' ', name)          # Normalize spaces
+    name = name.strip('. ')
+    clean_filename = name + ext
+
+    return clean_filename
 
 
 def main():
