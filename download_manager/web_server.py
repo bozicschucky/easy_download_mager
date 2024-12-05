@@ -1,16 +1,9 @@
 import asyncio
 import os
 from aiohttp import web
-import logging
-from urllib.parse import urlparse, unquote
-from download_manager.edm_cli import sanitize_filename
 from download_manager.utils.download_manager import DownloadManager as DM
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
 download_manager = DM(max_concurrent_downloads=4, progress=None)
-
 routes = web.RouteTableDef()
 
 
@@ -25,12 +18,10 @@ def ensure_downloads_dir():
 async def handle_download(request):
     data = await request.json()
     url = data.get('url')
+    output_file = data.get('filename')
     if not url:
         return web.json_response({'error': 'URL required'}, status=400)
 
-    parsed_url = urlparse(url)
-    output_file = os.path.basename(parsed_url.path)
-    output_file = sanitize_filename(output_file)
     output_dir = ensure_downloads_dir()
 
     await download_manager.add_download(url, output_file, output_dir)
