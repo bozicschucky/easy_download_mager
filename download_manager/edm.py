@@ -9,6 +9,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import ssl
+import certifi
 from typing import Dict
 from utils.file_utils import download_single_file
 from utils.helper_utils import get_dynamic_buffer_size, verify_file_integrity, calculate_chunks_and_batches, check_disk_space
@@ -26,6 +27,7 @@ MAX_BATCH_SIZE = 8  # Max number of chunks per batch
 MAX_RETRIES = 8  # Max number of retries for failed chunks
 RETRY_DELAY = 2  # Base delay in seconds for exponential backoff
 
+ssl_context = ssl.create_default_context(cafile=certifi.where())
 chunk_cache: Dict[str, bytes] = {}
 file_handle_pool = ThreadPoolExecutor(max_workers=32)
 
@@ -147,7 +149,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
 
     connector = TCPConnector(
         limit=MAX_CONNECTIONS,
-        ssl=ssl.create_default_context(),
+        ssl=ssl_context,
         verify_ssl=True,
         ttl_dns_cache=300,
         enable_cleanup_closed=True
@@ -255,6 +257,8 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
     except IOError as e:
         logger.error(f"Storage error: {str(e)}")
         raise StorageError(str(e))
+    except ssl.SSLError as e:
+        logger.error(f"SSL error: {e}")
     except Exception as e:
         logger.error(f"Download failed: {str(e)}")
         return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
