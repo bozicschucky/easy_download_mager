@@ -10,11 +10,11 @@ from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import ssl
 from typing import Dict
-from .utils.file_utils import download_single_file
-from .utils.helper_utils import get_dynamic_buffer_size, verify_file_integrity, calculate_chunks_and_batches, check_disk_space
-from .utils.exception_utils import DownloadError, NetworkError, StorageError
-from .utils.network_utils import BandwidthMonitor
-from .logger.progress_tracker import ProgressTracker, logger
+from utils.file_utils import download_single_file
+from utils.helper_utils import get_dynamic_buffer_size, verify_file_integrity, calculate_chunks_and_batches, check_disk_space
+from utils.exception_utils import DownloadError, NetworkError, StorageError
+from utils.network_utils import BandwidthMonitor
+from logger.progress_tracker import ProgressTracker, logger
 
 
 # Constants for configuration

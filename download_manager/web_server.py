@@ -1,8 +1,8 @@
 import asyncio
 import os
 from aiohttp import web
-from download_manager.edm_cli import sanitize_filename
-from download_manager.utils.download_manager import DownloadManager as DM
+from edm_cli import sanitize_filename
+from utils.download_manager import DownloadManager as DM
 
 download_manager = DM(max_concurrent_downloads=4, progress=None)
 routes = web.RouteTableDef()

@@ -1,6 +1,6 @@
 import asyncio
 from logger.progress_tracker import logger
-from download_manager.edm import download_file
+from edm import download_file
 
 
 class DownloadManager:

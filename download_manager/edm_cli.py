@@ -3,7 +3,7 @@ import re
 import os
 import asyncio
 import argparse
-from download_manager.utils.download_manager import DownloadManager
+from utils.download_manager import DownloadManager
 from logger.progress_tracker import logger
 
 download_manager = DownloadManager(max_concurrent_downloads=4)
