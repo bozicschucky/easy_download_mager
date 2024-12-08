@@ -1,4 +1,75 @@
 // background.js
+let socket;
+let reconnectInterval = 5000; // 5 seconds
+let ports = []; // Store connected ports
+
+// Handle port connections
+chrome.runtime.onConnect.addListener(function (port) {
+  ports.push(port);
+  console.log("Port connected:", port.name);
+
+  port.onDisconnect.addListener(function () {
+    ports = ports.filter((p) => p !== port);
+    console.log("Port disconnected:", port.name);
+  });
+});
+
+function connectWebSocket() {
+  socket = new WebSocket("ws://localhost:5500/ws");
+
+  socket.onopen = function () {
+    console.log("WebSocket connection established");
+  };
+
+  socket.onmessage = function (event) {
+    const message = JSON.parse(event.data);
+    console.log("WebSocket message:", message);
+    handleWebSocketMessage(message);
+  };
+
+  socket.onclose = function (event) {
+    console.log(
+      `WebSocket closed: ${event.code}. Reconnecting in ${
+        reconnectInterval / 1000
+      }s...`
+    );
+    setTimeout(connectWebSocket, reconnectInterval);
+  };
+
+  socket.onerror = function (error) {
+    console.error("WebSocket error:", error);
+    socket.close();
+  };
+}
+
+function handleWebSocketMessage(message) {
+  // Handle messages from the server
+  if (
+    message.type === "download_update" ||
+    message.type === "download_started" ||
+    message.type === "download_completed" ||
+    message.type === "download_failed" ||
+    message.type === "current_downloads"
+  ) {
+    broadcastDownloadUpdate(message);
+  }
+}
+
+// Send updates to popup/content scripts
+function broadcastDownloadUpdate(update) {
+  // Send to all connected ports
+  ports.forEach((port) => {
+    try {
+      port.postMessage(update);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
+  });
+}
+
+connectWebSocket();
+
+// Existing download interception code
 chrome.downloads.onCreated.addListener(async function (downloadItem) {
   try {
     // Cancel Chrome's download
@@ -37,6 +108,9 @@ chrome.downloads.onCreated.addListener(async function (downloadItem) {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
       }
     }
+    const file_name =
+      downloadItem.filename || new URL(url).pathname.split("/").pop();
+    const file_extension = file_name.split(".").pop();
 
     const fileDetails = {
       url: url,
@@ -47,6 +121,7 @@ chrome.downloads.onCreated.addListener(async function (downloadItem) {
       fileType: headers["content-type"] || "application/octet-stream",
       fileSize: headers["content-length"] || downloadItem.fileSize || 0,
       referrer: downloadItem.referrer,
+      file_extension: file_extension,
     };
 
     // Parse filename from Content-Disposition if available
@@ -73,5 +148,36 @@ chrome.downloads.onCreated.addListener(async function (downloadItem) {
     console.error("Error:", error);
     // Optionally resume original download on error
     chrome.downloads.resume(downloadItem.id);
+  }
+});
+
+// Listen for messages from content scripts or popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "getDownloadStatus") {
+    // Forward request to WebSocket server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "getStatus" }));
+    }
+  } else if (message.type === "pauseDownload") {
+    socket.send(
+      JSON.stringify({
+        type: "pauseDownload",
+        downloadId: message.downloadId,
+      })
+    );
+  } else if (message.type === "resumeDownload") {
+    socket.send(
+      JSON.stringify({
+        type: "resumeDownload",
+        downloadId: message.downloadId,
+      })
+    );
+  } else if (message.type === "cancelDownload") {
+    socket.send(
+      JSON.stringify({
+        type: "cancelDownload",
+        downloadId: message.downloadId,
+      })
+    );
   }
 });

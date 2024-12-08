@@ -5,49 +5,119 @@
   <title>EDM Download Interceptor</title>
   <style>
     body {
-      width: 300px;
+      width: 500px;
       padding: 10px;
+      font-family: Arial, sans-serif;
     }
 
-    .active-status {
+    .tab {
       display: inline-block;
-      margin-left: 10px;
+      padding: 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      border-bottom: none;
+      background-color: #f1f1f1;
     }
 
-    .active-status circle {
-      fill: green;
+    .tab.active {
+      background-color: #fff;
+      border-bottom: 1px solid #fff;
     }
 
-    .not-active-status circle {
-      fill: red;
+    .tab-content {
+      display: none;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background-color: #fff;
     }
 
-    button {
+    .tab-content.active {
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
       margin-top: 10px;
-      padding: 5px;
-      width: 100px;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+
+    tr:hover {
+      background-color: #f5f5f5;
+    }
+
+    .file-name {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h3>EDM Download Interceptor</h3>
-    <p>Version: 1.0.0</p>
+    <h3>EDM Download Interceptor 1.0.0</h3>
   </div>
   <hr>
-  <h4>Status</h4>
-  <div id="status">
-    <svg height="100" width="100" class="active-status">
-      <circle cx="30" cy="30" r="15" stroke="none" stroke-width="3" fill="red" />
-    </svg>
+  <div class="tabs">
+    <div class="tab active" data-tab="downloading">Downloading</div>
+    <div class="tab" data-tab="completed">Completed</div>
+    <div class="tab" data-tab="failed">Failed</div>
+  </div>
+  
+  <div id="downloading" class="tab-content active">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Size</th>
+          <th>Type</th>
+          <th>Progress</th>
+        </tr>
+      </thead>
+      <tbody id="downloading-list"></tbody>
+    </table>
+  </div>
 
+  <div id="completed" class="tab-content">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Size</th>
+          <th>Type</th>
+          <th>Location</th>
+        </tr>
+      </thead>
+      <tbody id="completed-list"></tbody>
+    </table>
   </div>
-  <hr>
-  <div id="">
-    <button id="start">Start</button>
-    <button id="stop">Stop</button>
+<div id="failed" class="tab-content">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Size</th>
+        <th>Type</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody id="failed-list"></tbody>
+  </table>
   </div>
+<script src="popup.js"></script>
 </body>
 
 </html>

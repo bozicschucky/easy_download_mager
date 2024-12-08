@@ -130,7 +130,14 @@ async def merge_chunks(chunk_files, output_file, buffer_size, progress_tracker=N
     logger.success(f"Completed merging {os.path.basename(output_file)}")
 
 
-async def download_file(url: str, output_file: str, output_dir: str = None, progress=None):
+async def download_file(
+    url: str,
+    output_file: str,
+    output_dir: str = None,
+    progress=None,
+    update_callback=None,
+    download_id=None
+):
     """
     Download file with optional output directory
     Args:
@@ -138,6 +145,8 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
         output_file: Target filename
         output_dir: Optional custom output directory (default: user's Downloads folder)
         progress: Progress callback
+        update_callback: Callback function for progress updates
+        download_id: Unique identifier for the download
     """
 
     # Resolve output directory
@@ -150,7 +159,6 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
     connector = TCPConnector(
         limit=MAX_CONNECTIONS,
         ssl=ssl_context,
-        verify_ssl=True,
         ttl_dns_cache=300,
         enable_cleanup_closed=True
     )
@@ -161,7 +169,8 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
         "timeout": timeout,
         "headers": {
             "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive"
+            "Connection": "keep-alive",
+            "User-Agent": "Mozilla/5.0"
         }
     }
 
@@ -173,8 +182,8 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
             # Get file size and check server support
             async with session.head(url) as response:
                 file_size = int(response.headers.get("Content-Length", 0))
-                accepts_ranges = response.headers.get(
-                    "Accept-Ranges", "").lower() == "bytes"
+                accepts_ranges = 'bytes' in response.headers.get(
+                    "Accept-Ranges", "").lower()
 
                 # Check disk space
                 if not check_disk_space(file_size):
@@ -183,10 +192,41 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                 if not accepts_ranges:
                     logger.info(
                         "Server doesn't support chunked downloads, trying single file...")
-                    return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+                    # Notify start of single-file download
+                    if update_callback and download_id:
+                        await update_callback(
+                            download_id=download_id,
+                            status='started',
+                            progress=0,
+                            error=None
+                        )
+                    result = await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+                    # Notify completion
+                    if update_callback and download_id:
+                        await update_callback(
+                            download_id=download_id,
+                            status='completed',
+                            progress=100,
+                            error=None
+                        )
+                    return result
 
                 # Set up progress tracker
                 progress_tracker = ProgressTracker(file_size)
+
+                # If progress tracker has a callback mechanism, set it
+                if update_callback and download_id:
+                    progress_tracker.set_update_callback(
+                        update_callback, download_id, url, output_file)
+
+            # Notify download start
+            if update_callback and download_id:
+                await update_callback(
+                    download_id=download_id,
+                    status='started',
+                    progress=0,
+                    error=None
+                )
 
             # Calculate chunks and prepare download
             chunks, batch_size = calculate_chunks_and_batches(file_size)
@@ -200,7 +240,7 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                 batch_chunks = chunks[batch_start:batch_end]
                 batch_files = chunk_files[batch_start:batch_end]
 
-                logger.success(f"Starting Batch {
+                logger.info(f"Starting Batch {
                             batch_num}/{(len(chunks) + batch_size - 1) // batch_size}")
 
                 tasks = []
@@ -211,7 +251,8 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
 
                 # Execute batch and handle results
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                failed_chunks = [i for i, res in enumerate(results) if not res]
+                failed_chunks = [i for i, res in enumerate(
+                    results) if isinstance(res, Exception) or not res]
 
                 if failed_chunks:
                     logger.warning(
@@ -233,7 +274,24 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
                             except NetworkError:
                                 logger.error(
                                     "Resume failed, falling back to single file...")
-                                return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+                                # Notify fall back to single-file download
+                                if update_callback and download_id:
+                                    await update_callback(
+                                        download_id=download_id,
+                                        status='fallback_single',
+                                        progress=progress_tracker.current_progress_percent(),
+                                        error=None
+                                    )
+                                result = await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+                                # Notify completion
+                                if update_callback and download_id:
+                                    await update_callback(
+                                        download_id=download_id,
+                                        status='completed',
+                                        progress=100,
+                                        error=None
+                                    )
+                                return result
 
                 # Log transfer for bandwidth monitoring
                 for batch_file in batch_files:
@@ -251,16 +309,74 @@ async def download_file(url: str, output_file: str, output_dir: str = None, prog
             logger.success(f"Download completed: {output_path} (Avg. Speed: {
                         bandwidth_monitor.get_speed() / (1024 * 1024):.1f} MB/s)")
 
+            # Notify completion
+            if update_callback and download_id:
+                await update_callback(
+                    download_id=download_id,
+                    status='completed',
+                    progress=100,
+                    error=None
+                )
+
+        return True
+
     except aiohttp.ClientError as e:
         logger.error(f"Network error: {str(e)}")
+        # Notify failure
+        if update_callback and download_id:
+            await update_callback(
+                download_id=download_id,
+                status='failed',
+                progress=progress_tracker.current_progress_percent(
+                ) if 'progress_tracker' in locals() else 0,
+                error=str(e)
+            )
         raise NetworkError(str(e))
     except IOError as e:
         logger.error(f"Storage error: {str(e)}")
+        # Notify failure
+        if update_callback and download_id:
+            await update_callback(
+                download_id=download_id,
+                status='failed',
+                progress=progress_tracker.current_progress_percent(
+                ) if 'progress_tracker' in locals() else 0,
+                error=str(e)
+            )
         raise StorageError(str(e))
     except ssl.SSLError as e:
         logger.error(f"SSL error: {e}")
+        # Notify failure
+        if update_callback and download_id:
+            await update_callback(
+                download_id=download_id,
+                status='failed',
+                progress=progress_tracker.current_progress_percent(
+                ) if 'progress_tracker' in locals() else 0,
+                error=str(e)
+            )
     except Exception as e:
         logger.error(f"Download failed: {str(e)}")
-        return await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+        # Notify failure
+        if update_callback and download_id:
+            await update_callback(
+                download_id=download_id,
+                status='failed',
+                progress=progress_tracker.current_progress_percent(
+                ) if 'progress_tracker' in locals() else 0,
+                error=str(e)
+            )
+        # Try single-file download as fallback
+        logger.info("Attempting to download file as single chunk...")
+        result = await download_single_file(session, url, CHUNK_READ_SIZE, output_path, progress)
+        # Notify completion
+        if update_callback and download_id:
+            await update_callback(
+                download_id=download_id,
+                status='completed',
+                progress=100,
+                error=None
+            )
+        return result
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
