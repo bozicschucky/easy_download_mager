@@ -2,17 +2,20 @@
   "manifest_version": 3,
   "name": "EDM Download Interceptor",
   "version": "1.0",
+  "description": "Intercepts downloads and manages them via EDM.",
   "permissions": [
     "downloads",
+    "scripting",
+    "storage",
+    "activeTab",
     "webRequest",
-    "webRequestBlocking",
-    "<all_urls>"
+    "downloads.shelf"
   ],
-  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html"
-  }
+  },
+  "host_permissions": ["<all_urls>"]
 }
