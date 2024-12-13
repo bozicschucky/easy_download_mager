@@ -1,8 +1,11 @@
 from functools import lru_cache
 import hashlib
 import math
+import os
+import re
 import shutil
 from typing import List, Optional, Tuple
+from urllib.parse import unquote
 import aiofiles
 import psutil
 
@@ -50,3 +53,49 @@ def get_dynamic_buffer_size(file_size: int, default_buffer_size=8388608) -> int:
     if file_size > 1024 * 1024 * 1024:  # Files >1GB
         return min(memory.available // 32, 16 * 1024 * 1024)  # Max 16MB buffer
     return default_buffer_size
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Clean filename by:
+    1. Decode URL encoding (%20 etc)
+    2. Remove invalid characters
+    3. Replace spaces properly
+    4. Preserve file extension
+    """
+    # First decode URL encoded characters
+    filename = unquote(filename)
+
+    # Split filename and extension
+    name, ext = os.path.splitext(filename)
+    name = re.sub(r'[<>:"/\\|?*]', '', name)  # Remove Windows invalid chars
+    name = re.sub(r'\s+', ' ', name)          # Normalize spaces
+    name = name.strip('. ')
+    clean_filename = name + ext
+
+    return clean_filename
+
+
+def extract_filename_from_url(url: str) -> str:
+    """
+    Extract clean filename from URL, handling complex paths and encoded characters.
+    Example:
+    Input: http:some_url/AudioBooks/Olaf Stapledon/1944 - Sirius/Sirius 09.mp3
+    Output: Sirius 09.mp3
+    """
+    # First decode URL encoded characters
+    decoded_url = unquote(url)
+
+    # Get the path part and split into components
+    path_parts = decoded_url.split('/')
+    raw_filename = next((part for part in reversed(path_parts) if part), '')
+
+    # If filename contains path-like sections, split and get last part
+    if '{' in raw_filename:
+        raw_filename = raw_filename.split('{')[0].strip()
+
+    # Handle timestamp/date patterns in filename
+    raw_filename = re.sub(r'\d{2,4}.*?(?=\S+\.\w+$)', '', raw_filename)
+    clean_filename = sanitize_filename(raw_filename)
+
+    return clean_filename.strip()
