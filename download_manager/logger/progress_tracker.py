@@ -1,5 +1,6 @@
 import time
 import sys
+import asyncio
 from download_manager.logger.color_formatter import logger
 
 
@@ -8,9 +9,19 @@ class ProgressTracker:
         self.total_size = total_size
         self.downloaded_size = 0
         self.start_time = time.time()
-        # Disable logging for progress updates
         self.last_update = 0
         self.update_interval = 0.5  # Update every 500ms
+        self.update_callback = None
+        self.download_id = None
+        self.url = None
+        self.filename = None
+
+    def set_update_callback(self, callback, download_id, url, filename):
+        """Set the callback function for WebSocket updates."""
+        self.update_callback = callback
+        self.download_id = download_id
+        self.url = url
+        self.filename = filename
 
     def update(self, chunk_size):
         self.downloaded_size += chunk_size
@@ -31,12 +42,24 @@ class ProgressTracker:
                 self.downloaded_size / (1024 * 1024):.1f}/{self.total_size / (1024 * 1024):.1f} MB "
             f"{download_speed / (1024 * 1024):.1f} MB/s {
                 time.strftime('%H:%M:%S', time.gmtime(remaining_time))}"
+            f"% {self.current_progress_percent()}"
         )
 
         # Clear line and print update
         sys.stdout.write('\033[K' + progress_msg)
         sys.stdout.flush()
         self.last_update = current_time
+
+        # Send progress update via WebSocket
+        if self.update_callback and self.download_id:
+            progress_percent = int(
+                (self.downloaded_size / self.total_size) * 100)
+            asyncio.create_task(self.update_callback(
+                self.download_id,
+                'downloading',
+                progress_percent,
+                None
+            ))
 
     def log_message(self, message, level="info"):
         sys.stdout.write('\n')
@@ -48,3 +71,6 @@ class ProgressTracker:
             logger.success(message)
         else:
             logger.info(message)
+
+    def current_progress_percent(self):
+        return int((self.downloaded_size / self.total_size) * 100) if self.total_size > 0 else 0
